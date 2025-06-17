@@ -5,20 +5,16 @@ import argparse
 import requests
 import csv
 import json
+from dotenv import load_dotenv
+from pathlib import Path
 
-# Carrega .env um nível acima de scripts/
-try:
-    from dotenv import load_dotenv
-    from pathlib import Path
-    script_path = Path(__file__).resolve()
-    project_root = script_path.parent.parent
-    env_path = project_root / ".env"
-    load_dotenv(dotenv_path=env_path)
-except ImportError:
-    pass
+# Carrega .env um nível acima do diretório do script
+script_path = Path(__file__).resolve()
+project_root = script_path.parent.parent
+env_path = project_root / ".env"
+load_dotenv(dotenv_path=env_path)
 
-# Lê endpoint da API do ambiente ou usa /api/v2/user por padrão
-API_URL = os.getenv("FFLOGS_API_URL", "https://www.fflogs.com/api/v2/user")
+API_URL = "https://www.fflogs.com/api/v2/client"
 TOKEN_URL = "https://www.fflogs.com/oauth/token"
 
 def get_access_token():
@@ -28,35 +24,25 @@ def get_access_token():
 
     client_id = os.getenv("FFLOGS_CLIENT_ID")
     client_secret = os.getenv("FFLOGS_CLIENT_SECRET")
-    redirect_uri = os.getenv("FFLOGS_REDIRECT_URI")
-    auth_code = os.getenv("FFLOGS_AUTH_CODE")
-
-    if client_id and client_secret and redirect_uri and auth_code:
+    if client_id and client_secret:
         resp = requests.post(
             TOKEN_URL,
-            data={
-                "grant_type": "authorization_code",
-                "code": auth_code,
-                "redirect_uri": redirect_uri,
-                "client_id": client_id,
-                "client_secret": client_secret
-            }
+            auth=(client_id, client_secret),
+            data={"grant_type": "client_credentials"}
         )
         resp.raise_for_status()
         data = resp.json()
-        tok = data.get("access_token")
-        if not tok:
-            raise RuntimeError("Authorization code não retornou access_token.")
-        return tok
+        token = data.get("access_token")
+        if not token:
+            raise RuntimeError("Client credentials retornou sem access_token.")
+        return token
 
-    raise RuntimeError(
-        "Não encontrou FFLOGS_ACCESS_TOKEN nem (FFLOGS_CLIENT_ID + FFLOGS_CLIENT_SECRET + FFLOGS_REDIRECT_URI + FFLOGS_AUTH_CODE) no ambiente."
-    )
+    raise RuntimeError("Não encontrou token nem credenciais no ambiente.")
 
 def obter_fights(access_token, report_code):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     query = """
-    query getFightsWithTimes($code: String!) {
+    query getFights($code: String!) {
       reportData {
         report(code: $code) {
           fights {
@@ -77,34 +63,47 @@ def obter_fights(access_token, report_code):
         raise RuntimeError(f"Erro ao obter fights: {data['errors']}")
     return data["data"]["reportData"]["report"]["fights"]
 
-def fetch_events_page(access_token, report_code, fight_id, start_time, end_time, page_ts):
+def obter_name_map_via_table(access_token, report_code, fight_ids):
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     query = """
-    query getEventsForFight($code: String!, $fightID: Int!, $startTime: Float!, $endTime: Float!, $limit: Int!, $pageTimestamp: Float) {
+    query getTable($code: String!, $fightIDs: [Int!]!) {
       reportData {
         report(code: $code) {
-          fights(ids: [$fightID]) {
-            events(
-              dataType: DAMAGE,
-              startTime: $startTime,
-              endTime: $endTime,
-              limit: 1000,
-              pageTimestamp: $pageTimestamp
-            ) {
-              entries {
-                timestamp
-                sourceID
-                sourceName
-                sourceIsFriendly
-                targetID
-                targetName
-                targetIsFriendly
-                abilityGUID
-                abilityName
-                amount
-              }
-              nextPageTimestamp
-            }
+          table(fightIDs: $fightIDs)
+        }
+      }
+    }
+    """
+    variables = {"code": report_code, "fightIDs": fight_ids}
+    resp = requests.post(API_URL, headers=headers, json={"query": query, "variables": variables})
+    resp.raise_for_status()
+    data = resp.json()
+    table_json = data["data"]["reportData"]["report"]["table"]
+    if isinstance(table_json, str):
+        parsed = json.loads(table_json)
+    else:
+        parsed = table_json
+
+    name_map = {}
+    for actor in parsed.get("composition", []):
+        if "id" in actor and "name" in actor:
+            name_map[actor["id"]] = actor["name"]
+    return name_map
+
+def fetch_events_page(access_token, report_code, fight_id, start_time, end_time):
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    query = """
+    query getEvents($code: String!, $fightID: Int!, $startTime: Float!, $endTime: Float!) {
+      reportData {
+        report(code: $code) {
+          events(
+            dataType: DamageDone,
+            fightIDs: [$fightID],
+            startTime: $startTime,
+            endTime: $endTime,
+            limit: 1000
+          ) {
+            data
           }
         }
       }
@@ -114,102 +113,103 @@ def fetch_events_page(access_token, report_code, fight_id, start_time, end_time,
         "code": report_code,
         "fightID": fight_id,
         "startTime": start_time,
-        "endTime": end_time,
-        "pageTimestamp": page_ts
+        "endTime": end_time
     }
     resp = requests.post(API_URL, headers=headers, json={"query": query, "variables": variables})
     resp.raise_for_status()
     data = resp.json()
     if "errors" in data:
         raise RuntimeError(f"{data['errors']}")
-    fights_list = data["data"]["reportData"]["report"]["fights"]
-    if not fights_list:
-        return [], None
-    events_block = fights_list[0].get("events")
-    if not events_block:
-        return [], None
-    return events_block.get("entries", []), events_block.get("nextPageTimestamp")
+    events = data["data"]["reportData"]["report"]["events"]["data"]
+    return events
 
-def salvar_csv_events_simple(fights, report_code, access_token, output_file, page_delay):
-    header = ["fightID", "fightName", "timestamp",
-              "sourceID", "sourceName", "sourceIsFriendly",
-              "targetID", "targetName", "targetIsFriendly",
-              "abilityGUID", "abilityName", "amount"]
-    with open(output_file, "w", newline="", encoding="utf-8") as f:
+def salvar_csv_events_detalhados(fights, report_code, access_token, output_file, delay=1.0, name_map=None):
+    from pathlib import Path
+
+    campos = [
+        "fightID", "timestamp", "sourceID", "sourceName",
+        "targetID", "targetName", "abilityGUID", "abilityName", "amount"
+    ]
+
+    # Define caminho para /projeto/data/<output_file>
+    output_path = Path(__file__).resolve().parent.parent / "data" / output_file
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    file_exists = output_path.exists()
+    write_header = not file_exists or output_path.stat().st_size == 0
+
+    with open(output_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(header)
+        if write_header:
+            writer.writerow(campos)
         for fight in fights:
             fid = fight["id"]
-            fname = fight.get("name", "")
-            start = fight.get("startTime")
-            end = fight.get("endTime")
-            if start is None or end is None:
-                print(f"Pule fight {fid} sem start/end.")
-                continue
-            print(f"Processando fight {fid} ({fname})...")
-            page_ts = None
-            while True:
+            print(f"Processando fight {fid}...")
+            start = fight["startTime"]
+            end = fight["endTime"]
+            current = start
+            while current < end:
                 try:
-                    entries, next_ts = fetch_events_page(access_token, report_code, fid, start, end, page_ts)
+                    entries = fetch_events_page(access_token, report_code, fid, current, end)
                 except Exception as e:
-                    print(f"  Erro ao buscar página de eventos (fight {fid}): {e}")
+                    print(f"[Erro] Fight {fid}: {e}")
                     break
                 if not entries:
                     break
                 for ev in entries:
+                    src_id = ev.get("sourceID")
+                    tgt_id = ev.get("targetID")
+                    src_name = name_map.get(src_id) or ev.get("sourceName", "")
+                    tgt_name = name_map.get(tgt_id) or ev.get("targetName", "")
                     writer.writerow([
                         fid,
-                        fname,
                         ev.get("timestamp"),
-                        ev.get("sourceID"),
-                        ev.get("sourceName"),
-                        ev.get("sourceIsFriendly"),
-                        ev.get("targetID"),
-                        ev.get("targetName"),
-                        ev.get("targetIsFriendly"),
-                        ev.get("abilityGUID"),
-                        ev.get("abilityName"),
+                        src_id,
+                        src_name,
+                        tgt_id,
+                        tgt_name,
+                        ev.get("ability", {}).get("guid"),
+                        ev.get("ability", {}).get("name"),
                         ev.get("amount")
                     ])
-                if not next_ts:
-                    break
-                page_ts = next_ts
-                time.sleep(page_delay)
-            print(f"  Concluído fight {fid}.")
-            time.sleep(page_delay)
+                current = max(ev.get("timestamp", current) for ev in entries) + 1
+                time.sleep(delay)
+
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Extrai instâncias de dano de um FFLogs report para CSV com autenticação de usuário."
-    )
+    parser = argparse.ArgumentParser(description="Extrai todas as instâncias de dano de um FFLogs report.")
     parser.add_argument("report_code", help="Código do report FFLogs")
-    parser.add_argument("-o", "--output", default="all_damage_events.csv",
-                        help="Arquivo CSV de saída")
-    parser.add_argument("--page-delay", type=float, default=1.0,
-                        help="Delay (s) entre páginas de events e entre fights")
+    parser.add_argument("--output", default="instancias_dano.csv", help="Arquivo CSV de saída")
+    parser.add_argument("--page-delay", type=float, default=1.0, help="Delay entre páginas")
     args = parser.parse_args()
 
     try:
         access_token = get_access_token()
     except Exception as e:
-        print(f"[Erro] não conseguiu obter access token: {e}")
+        print(f"[Erro] Não conseguiu obter access token: {e}")
         return
 
     try:
         fights = obter_fights(access_token, args.report_code)
     except Exception as e:
-        print(f"[Erro] falha ao obter fights: {e}")
+        print(f"[Erro] Falha ao obter fights: {e}")
         return
 
+    try:
+        fight_ids = [f["id"] for f in fights]
+        name_map = obter_name_map_via_table(access_token, args.report_code, fight_ids[:3])
+    except Exception as e:
+        print(f"[Erro] Falha ao obter nomes via table: {e}")
+        name_map = {}
+
     if not fights:
-        print("Nenhum fight encontrado no report.")
+        print("Nenhum fight encontrado.")
         return
 
     print("Fights encontrados:")
     for f in fights:
         print(f"  ID {f['id']}: {f.get('name','')}")
-    print(f"Usando API_URL = {API_URL}")
-    salvar_csv_events_simple(fights, args.report_code, access_token, args.output, args.page_delay)
+
+    salvar_csv_events_detalhados(fights, args.report_code, access_token, args.output, args.page_delay, name_map)
     print("Concluído. CSV salvo em", args.output)
 
 if __name__ == "__main__":

@@ -176,8 +176,9 @@ def salvar_csv_events_detalhados(fights, report_code, access_token, output_file,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Extrai todas as instâncias de dano de um FFLogs report.")
-    parser.add_argument("report_code", help="Código do report FFLogs")
+    parser = argparse.ArgumentParser(description="Extrai todas as instâncias de dano de um ou mais FFLogs reports.")
+    parser.add_argument("report_code", nargs="?", help="Código do report FFLogs (opcional se usar --input)")
+    parser.add_argument("--input", help="Arquivo contendo múltiplos report codes (um por linha)")
     parser.add_argument("--output", default="instancias_dano.csv", help="Arquivo CSV de saída")
     parser.add_argument("--page-delay", type=float, default=1.0, help="Delay entre páginas")
     args = parser.parse_args()
@@ -185,32 +186,51 @@ def main():
     try:
         access_token = get_access_token()
     except Exception as e:
-        print(f"[Erro] Não conseguiu obter access token: {e}")
+        print(f"[Erro] Nao conseguiu obter access token: {e}")
         return
 
-    try:
-        fights = obter_fights(access_token, args.report_code)
-    except Exception as e:
-        print(f"[Erro] Falha ao obter fights: {e}")
+    report_codes = []
+
+    if args.input:
+        try:
+            with open(args.input, "r", encoding="utf-8") as f:
+                report_codes = [line.strip() for line in f if line.strip()]
+        except Exception as e:
+            print(f"[Erro] Falha ao ler arquivo de input: {e}")
+            return
+    elif args.report_code:
+        report_codes = [args.report_code]
+    else:
+        print("[Erro] Nenhum report_code ou input fornecido.")
         return
 
-    try:
-        fight_ids = [f["id"] for f in fights]
-        name_map = obter_name_map_via_table(access_token, args.report_code, fight_ids[:3])
-    except Exception as e:
-        print(f"[Erro] Falha ao obter nomes via table: {e}")
-        name_map = {}
+    for report_code in report_codes:
+        print(f"\n🔍 Processando report: {report_code}")
+        try:
+            fights = obter_fights(access_token, report_code)
+        except Exception as e:
+            print(f"[Erro] Falha ao obter fights do report {report_code}: {e}")
+            continue
 
-    if not fights:
-        print("Nenhum fight encontrado.")
-        return
+        try:
+            fight_ids = [f["id"] for f in fights]
+            name_map = obter_name_map_via_table(access_token, report_code, fight_ids[:3])
+        except Exception as e:
+            print(f"[Erro] Falha ao obter nomes via table para report {report_code}: {e}")
+            name_map = {}
 
-    print("Fights encontrados:")
-    for f in fights:
-        print(f"  ID {f['id']}: {f.get('name','')}")
+        if not fights:
+            print("Nenhum fight encontrado.")
+            continue
 
-    salvar_csv_events_detalhados(fights, args.report_code, access_token, args.output, args.page_delay, name_map)
-    print("Concluído. CSV salvo em", args.output)
+        print("Fights encontrados:")
+        for f in fights:
+            print(f"  ID {f['id']}: {f.get('name','')}")
+
+        salvar_csv_events_detalhados(fights, report_code, access_token, args.output, args.page_delay, name_map)
+
+    print("\nConcluido. CSV salvo em", args.output)
+
 
 if __name__ == "__main__":
     main()

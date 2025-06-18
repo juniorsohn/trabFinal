@@ -179,7 +179,7 @@ def main():
     parser = argparse.ArgumentParser(description="Extrai todas as instâncias de dano de um ou mais FFLogs reports.")
     parser.add_argument("report_code", nargs="?", help="Código do report FFLogs (opcional se usar --input)")
     parser.add_argument("--input", help="Arquivo contendo múltiplos report codes (um por linha)")
-    parser.add_argument("--output", default="instancias_dano.csv", help="Arquivo CSV de saída")
+    parser.add_argument("--output", default="eventos.csv", help="Arquivo CSV de saída")
     parser.add_argument("--page-delay", type=float, default=1.0, help="Delay entre páginas")
     args = parser.parse_args()
 
@@ -205,7 +205,7 @@ def main():
         return
 
     for report_code in report_codes:
-        print(f"\n🔍 Processando report: {report_code}")
+        print(f"\nProcessando report: {report_code}")
         try:
             fights = obter_fights(access_token, report_code)
         except Exception as e:

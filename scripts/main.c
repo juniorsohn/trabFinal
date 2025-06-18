@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>   // para INT_MAX
+#include <string.h>
 
 int cmp_int(const void *a, const void *b) {
     return (*(int*)a - *(int*)b);
@@ -12,34 +13,64 @@ int main(int argc, char *argv[]) {
     int N = 16;             // numero real de elementos
     int total_n;            // N ajustado (com dummies)
     int *data = NULL;       // só no root
+    double start_time, end_time;
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if (rank == 0) {
-        // Inicializa os dados reais
-        data = malloc(sizeof(int) * N);
-        srand(0);
-        for (int i = 0; i < N; i++) {
-            data[i] = rand() % 100;
+    start_time = MPI_Wtime(); // começa o timer
+
+
+   if (rank == 0) {
+        if (argc < 2) {
+            fprintf(stderr, "Uso: %s arquivo.csv\n", argv[0]);
+            MPI_Abort(MPI_COMM_WORLD, 1);
         }
-        // Calcula padding para múltiplo de 'size'
+
+        FILE *fp = fopen(argv[1], "r");
+        if (!fp) {
+            perror("Erro ao abrir o arquivo");
+            MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+
+        char linha[256];
+        int capacidade = 128;
+        data = malloc(sizeof(int) * capacidade);
+        N = 0;
+
+        // Ignora o cabeçalho
+        fgets(linha, sizeof(linha), fp);
+
+        while (fgets(linha, sizeof(linha), fp)) {
+            char *ptr = strrchr(linha, ',');  // Última vírgula
+            if (ptr) {
+                int val = atoi(ptr + 1);
+                if (N >= capacidade) {
+                    capacidade *= 2;
+                    data = realloc(data, sizeof(int) * capacidade);
+                }
+                data[N++] = val;
+            }
+        }
+
+        fclose(fp);
+
         int rem = N % size;
         int pad = (rem == 0 ? 0 : size - rem);
         total_n = N + pad;
 
-        // Realoca e preenche dummies
         data = realloc(data, sizeof(int) * total_n);
         for (int i = N; i < total_n; i++) {
-            data[i] = INT_MAX;  // valor sentinela
+            data[i] = INT_MAX;
         }
-
-        printf("Unsorted array (with %d dummies):\n", pad);
+        /*
+        printf("Lido %d valores do arquivo (com %d dummies):\n", N, pad);
         for (int i = 0; i < total_n; i++) {
             printf("%d ", data[i]);
         }
-        printf("\n\n");
+        printf("\n\n");*/
     }
+
 
     // 1) Broadcast do tamanho ajustado
     MPI_Bcast(&total_n, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -145,13 +176,27 @@ int main(int argc, char *argv[]) {
                 data, gather_counts, gather_offsets, MPI_INT,
                 0, MPI_COMM_WORLD);
 
+    end_time = MPI_Wtime();
+
     // 12) Root imprime só os N valores originais, descartando dummies
     if (rank == 0) {
-        printf("Sorted array (descartando dummies):\n");
+        printf("\nTempo total de execução: %.6f segundos\n", end_time - start_time);
+        /*printf("Sorted array (descartando dummies):\n");
         for (int i = 0; i < N; i++) {
             printf("%d ", data[i]);
         }
         printf("\n");
+        */
+        FILE *out = fopen("saida_ordenada.txt", "w");
+        if (!out) {
+            perror("Erro ao abrir arquivo de saída");
+        } else {
+            for (int i = 0; i < N; i++) {
+                fprintf(out, "%d\n", data[i]);
+            }
+        fclose(out);
+        printf("Vetor ordenado salvo em 'saida_ordenada.txt'\n");
+        }
     }
 
     // Cleanup (libera tudo)

@@ -52,19 +52,36 @@ int main(int argc, char *argv[]) {
                 data[N++] = val;
             }
         }
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
         fclose(fp);
 
         int rem = N % size;
         int pad = (rem == 0 ? 0 : size - rem);
         total_n = N + pad;
+<<<<<<< HEAD
         fprintf(stderr, "[DEBUG] rank 0: N = %d, total_n = %d\n", N, total_n);
         fflush(stderr);
+=======
+
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
         data = realloc(data, sizeof(int) * total_n);
         for (int i = N; i < total_n; i++) {
             data[i] = INT_MAX;
         }
+<<<<<<< HEAD
         
+=======
+        /*
+        printf("Lido %d valores do arquivo (com %d dummies):\n", N, pad);
+        for (int i = 0; i < total_n; i++) {
+            printf("%d ", data[i]);
+        }
+        printf("\n\n");*/
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
     }
 
 

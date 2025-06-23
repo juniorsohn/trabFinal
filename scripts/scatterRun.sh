@@ -1,10 +1,18 @@
 #!/bin/bash
 
+<<<<<<< HEAD
 ARQUIVO="../data/eventos_maior.csv"
 BINARIO="./main"
 REPETICOES=10
 HOSTS="hosts.txt"
 INTERFACE="10.10.40.0/24"
+=======
+ARQUIVO="../data/eventos.csv"
+BINARIO="./main"
+REPETICOES=10
+HOSTS="hosts.txt"
+INTERFACE="10.20.221.0/24"
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
 NP=$1 #recebe via linha de comando
 
 # Algoritmos do Scatter: ID e nome
@@ -16,7 +24,11 @@ declare -A ALGORITMOS=(
 )
 
 # Arquivo de saída
+<<<<<<< HEAD
 OUT="../output/resultados_scatter.csv"
+=======
+OUT="resultados_scatter.csv"
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
 
 # Se o arquivo ainda não existe, adiciona o cabeçalho
 if [[ ! -f "$OUT" ]]; then
@@ -34,7 +46,11 @@ for id in 0 1 2 3; do
                --mca coll_tuned_use_dynamic_rules 1 \
                --mca coll_tuned_scatter_algorithm $id \
                -np $NP \
+<<<<<<< HEAD
                "$BINARIO" "$ARQUIVO" 2> run_output.log 2>&1 | \
+=======
+               "$BINARIO" "$ARQUIVO" 2>/dev/null | \
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
         grep "Tempo total de execução" | awk '{print $(NF-1)}')
 
         if [[ ! -z "$tempo" ]]; then

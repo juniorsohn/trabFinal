@@ -180,7 +180,11 @@ def main():
     parser.add_argument("report_code", nargs="?", help="Código do report FFLogs (opcional se usar --input)")
     parser.add_argument("--input", help="Arquivo contendo múltiplos report codes (um por linha)")
 <<<<<<< HEAD
+<<<<<<< HEAD
     parser.add_argument("--output", default="instancias_dano.csv", help="Arquivo CSV de saída")
+=======
+    parser.add_argument("--output", default="eventos.csv", help="Arquivo CSV de saída")
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
 =======
     parser.add_argument("--output", default="eventos.csv", help="Arquivo CSV de saída")
 >>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
@@ -210,7 +214,11 @@ def main():
 
     for report_code in report_codes:
 <<<<<<< HEAD
+<<<<<<< HEAD
         print(f"\n🔍 Processando report: {report_code}")
+=======
+        print(f"\nProcessando report: {report_code}")
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
 =======
         print(f"\nProcessando report: {report_code}")
 >>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e

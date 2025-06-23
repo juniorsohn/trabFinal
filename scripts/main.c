@@ -53,7 +53,11 @@ int main(int argc, char *argv[]) {
             }
         }
 <<<<<<< HEAD
+<<<<<<< HEAD
         
+=======
+
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
 =======
 
 >>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
@@ -63,8 +67,12 @@ int main(int argc, char *argv[]) {
         int pad = (rem == 0 ? 0 : size - rem);
         total_n = N + pad;
 <<<<<<< HEAD
+<<<<<<< HEAD
         fprintf(stderr, "[DEBUG] rank 0: N = %d, total_n = %d\n", N, total_n);
         fflush(stderr);
+=======
+
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
 =======
 
 >>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
@@ -73,14 +81,20 @@ int main(int argc, char *argv[]) {
             data[i] = INT_MAX;
         }
 <<<<<<< HEAD
+<<<<<<< HEAD
         
 =======
+=======
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
         /*
         printf("Lido %d valores do arquivo (com %d dummies):\n", N, pad);
         for (int i = 0; i < total_n; i++) {
             printf("%d ", data[i]);
         }
         printf("\n\n");*/
+<<<<<<< HEAD
+>>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
+=======
 >>>>>>> 5455d70157b0833ee19c5344b1c5b86e5965c95e
     }
 
